@@ -4,6 +4,8 @@
 
 Sync your zellij theme to whatever colorscheme is active in neovim.
 
+![Demo: switching nvim colorscheme through catppuccin, gruvbox-material, tokyonight, PaperColor, and carbonfox, with zellij's theme following live](assets/demo.gif)
+
 It rewrites zellij's config file directly. zellij watches that file for
 changes and applies them to your already-running session automatically
 (zellij polls it roughly once a second), so this takes effect live — no
