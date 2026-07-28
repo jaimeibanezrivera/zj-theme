@@ -1,0 +1,135 @@
+*zj-theme.txt*                       Sync zellij's theme with your colorscheme
+*zj-theme*
+
+==============================================================================
+CONTENTS                                                   *zj-theme-contents*
+
+  Introduction ....................................... |zj-theme-introduction|
+  Requirements ....................................... |zj-theme-requirements|
+  Installation ....................................... |zj-theme-installation|
+  Configuration ..................................... |zj-theme-configuration|
+  Commands ............................................... |zj-theme-commands|
+  Built-in mappings ...................................... |zj-theme-mappings|
+  Fallback behavior ...................................... |zj-theme-fallback|
+  Health ................................................... |zj-theme-health|
+
+==============================================================================
+INTRODUCTION                                           *zj-theme-introduction*
+
+zj-theme.nvim syncs zellij's theme to whatever nvim colorscheme is
+currently active.
+
+It rewrites zellij's config file directly. zellij watches that file for
+changes and applies them to your already-running session automatically
+(zellij polls it roughly once a second), so this takes effect live — no
+restart needed.
+
+How it works:
+
+  1. A |ColorScheme| autocmd fires whenever you run `:colorscheme ...` (or a
+     plugin sets one on your behalf).
+  2. The new `vim.g.colors_name` is looked up in a mapping table (built-in
+     defaults + anything you add) to find the corresponding zellij theme
+     name.
+  3. The `theme "..."` line in zellij's `config.kdl` is rewritten in place
+     with that theme name.
+  4. If any step fails — you're not inside a zellij session, the colorscheme
+     has no mapping, the config file isn't readable, or it has no `theme`
+     line to rewrite — it falls back to a configurable default zellij theme
+     instead of leaving things inconsistent.
+
+==============================================================================
+REQUIREMENTS                                           *zj-theme-requirements*
+
+Neovim >= 0.10, for the `vim.health.*` API used by |zj-theme-health|.
+
+==============================================================================
+INSTALLATION                                           *zj-theme-installation*
+
+Works with any plugin manager. Example with lazy.nvim:
+>lua
+  {
+    "jaimeibanezrivera/zj-theme",
+    lazy = false,
+    config = function()
+      require("zj-theme").setup({
+        -- see |zj-theme-configuration|
+      })
+    end,
+  }
+<
+See the README for packer.nvim, vim-plug, mini.deps, and vim.pack examples.
+
+==============================================================================
+CONFIGURATION                                         *zj-theme-configuration*
+>lua
+  require("zj-theme").setup({
+    -- Path to zellij's config.kdl. Defaults to ~/.config/zellij/config.kdl.
+    zellij_config_path = vim.fn.expand("~/.config/zellij/config.kdl"),
+
+    -- zellij themes to fall back to when the current colorscheme has no
+    -- mapping, or when writing zellij_config_path fails. Picked based on
+    -- vim.o.background so a dark colorscheme doesn't fall back to a light
+    -- zellij theme or vice versa.
+    default_dark_theme = "default",
+    default_light_theme = "pencil-light",
+
+    -- nvim colors_name -> zellij theme name. Merged over the built-in table
+    -- in lua/zj-theme/mappings.lua, so you only need
+    -- overrides/additions. A value can also be { dark = "...", light = "..." }
+    -- for colorschemes that keep vim.g.colors_name the same across
+    -- light/dark (ayu.nvim, gruvbox-material, everforest-nvim all do this,
+    -- and are already handled by the bundled defaults) — resolved via the
+    -- current vim.o.background.
+    mappings = {
+      mycustomtheme = "my-zellij-theme-name",
+      myflexibletheme = { dark = "my-dark-zellij-theme", light = "my-light-zellij-theme" },
+    },
+
+    -- Set to false to silence vim.notify warnings/errors.
+    notify = true,
+  })
+<
+Your `config.kdl` needs an actual (uncommented) `theme "..."` line already
+present for this plugin to find and rewrite — it won't add one from
+scratch.
+
+==============================================================================
+COMMANDS                                                   *zj-theme-commands*
+
+                                                                  *:ZjThemeNow*
+:ZjThemeNow
+  Re-applies the mapping for whatever colorscheme is currently active —
+  useful for testing config changes without switching colorschemes.
+
+==============================================================================
+BUILT-IN MAPPINGS                                          *zj-theme-mappings*
+
+See `lua/zj-theme/mappings.lua` for the full list (catppuccin,
+gruvbox, tokyonight, nord, dracula, kanagawa, everforest, solarized, ayu,
+onedark, and a few variants). These are best-effort — override any of them
+via `mappings` in |zj-theme-configuration|.
+
+==============================================================================
+FALLBACK BEHAVIOR                                          *zj-theme-fallback*
+
+`default_dark_theme` or `default_light_theme` (chosen by `vim.o.background`)
+is used whenever:
+
+  - nvim is not running inside a zellij session (`$ZELLIJ` unset) — no-op,
+    nothing is written at all.
+  - the active colorscheme has no entry in `mappings`.
+  - `zellij_config_path` doesn't exist/isn't readable, or has no
+    `theme "..."` line to rewrite.
+
+==============================================================================
+HEALTH                                                       *zj-theme-health*
+
+Run `:checkhealth zj-theme` to check:
+
+  - whether `setup()` has been called
+  - whether you're currently inside a zellij session
+  - whether `zellij_config_path` exists and has a `theme "..."` line
+  - whether the currently active colorscheme has a mapping
+
+vim:tw=78:ts=8:noet:ft=help:norl:
