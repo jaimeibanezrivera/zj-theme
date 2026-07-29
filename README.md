@@ -234,15 +234,9 @@ active colorscheme is mapped.
 
 - **[bg.nvim](https://github.com/typicode/bg.nvim)** — syncs your terminal
   emulator's own background/cursor color to your active nvim colorscheme,
-  live, via OSC 11/12 escape sequences. It doesn't work reliably *inside*
-  zellij, though: zellij intercepts OSC sequences itself (applying them
-  per-pane) instead of passing them through to the real terminal underneath
-  — a real, currently open zellij limitation
-  ([zellij-org/zellij#3954](https://github.com/zellij-org/zellij/issues/3954),
-  [#4712](https://github.com/zellij-org/zellij/issues/4712)), not a bug in
-  bg.nvim. Workaround: exit zellij, let bg.nvim sync your terminal's theme
-  (e.g. open nvim briefly outside zellij), then launch zellij — and nvim
-  inside it — again.
+  live, via OSC 11/12 escape sequences. Works inside zellij (>= v0.44.0) too
+  — it recolors the pane nvim is running in; other panes and tabs keep
+  whatever background they already had.
 
 ## License
 
