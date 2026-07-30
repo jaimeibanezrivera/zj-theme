@@ -19,6 +19,22 @@ M.defaults = {
   -- defaults in mappings.lua, so you only need to specify overrides/additions.
   mappings = {},
 
+  -- Whether to push the current colorscheme's bg/fg to every pane in the
+  -- zellij session: the pane nvim itself is running in (via raw terminal
+  -- escape sequences, OSC 11/12) and every other pane (via `zellij action
+  -- set-pane-color`, which requires zellij >= 0.44.0 and the `zellij` CLI
+  -- on PATH — nvim's own pane has no such requirement and stays in sync
+  -- even if that CLI is missing/too old). Set to false to leave every
+  -- pane's background alone.
+  sync_pane_backgrounds = true,
+
+  -- How often (ms) to poll for newly created zellij panes and color them
+  -- to match the current colorscheme — otherwise a pane opened after a
+  -- `:colorscheme` switch keeps zellij's default background until the next
+  -- one. Set to 0 to disable polling (panes are still synced on every
+  -- colorscheme change, just not when a new pane appears in between).
+  pane_poll_interval_ms = 1000,
+
   -- Whether to vim.notify on fallback/errors. Set to false to silence.
   notify = true,
 }
