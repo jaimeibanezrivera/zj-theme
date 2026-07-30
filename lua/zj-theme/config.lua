@@ -20,12 +20,10 @@ M.defaults = {
   mappings = {},
 
   -- Whether to push the current colorscheme's bg/fg to every pane in the
-  -- zellij session: the pane nvim itself is running in (via raw terminal
-  -- escape sequences, OSC 11/12) and every other pane (via `zellij action
-  -- set-pane-color`, which requires zellij >= 0.44.0 and the `zellij` CLI
-  -- on PATH — nvim's own pane has no such requirement and stays in sync
-  -- even if that CLI is missing/too old). Set to false to leave every
-  -- pane's background alone.
+  -- zellij session, including the one nvim itself is running in, via
+  -- `zellij action set-pane-color` (requires zellij >= 0.44.0 and the
+  -- `zellij` CLI on PATH). Set to false to leave every pane's background
+  -- alone.
   sync_pane_backgrounds = true,
 
   -- How often (ms) to poll for newly created zellij panes and color them

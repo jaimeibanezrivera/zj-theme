@@ -1,14 +1,12 @@
 local config = require("zj-theme.config")
 local sync = require("zj-theme.sync")
 local pane_bg = require("zj-theme.pane_bg")
-local osc = require("zj-theme.osc")
 
 local M = {}
 
 local function apply_all()
   sync.apply(vim.g.colors_name)
   pane_bg.apply()
-  osc.apply()
 end
 
 function M.setup(opts)

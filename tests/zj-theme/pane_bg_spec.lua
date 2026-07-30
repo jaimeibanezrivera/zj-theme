@@ -97,11 +97,10 @@ describe("zj-theme.pane_bg", function()
 
   describe("apply", function()
     it("sets bg/fg on every real, non-exited pane, including the one nvim runs in", function()
-      -- Regression test: the pane nvim runs in used to be excluded here and
-      -- left to osc.lua's raw terminal escapes alone, but OSC 11/12 isn't a
-      -- persistent per-pane property — once nvim exits, that pane reverted
-      -- to zellij's plain default with nothing holding the color. It must
-      -- get set-pane-color too, exactly like every other pane.
+      -- Regression test: the pane nvim runs in used to be excluded here,
+      -- so once nvim exited that pane reverted to zellij's plain default
+      -- with nothing holding the color. It must get set-pane-color too,
+      -- exactly like every other pane.
       local calls, restore = stub_system(json_panes(panes))
       pane_bg.apply()
       restore()

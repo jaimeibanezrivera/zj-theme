@@ -1,6 +1,5 @@
 local config = require("zj-theme.config")
 local pane_bg = require("zj-theme.pane_bg")
-local osc = require("zj-theme.osc")
 local zj_theme = require("zj-theme")
 
 -- Stubs vim.system so tests never shell out to a real `zellij` binary.
@@ -17,21 +16,6 @@ local function stub_system()
 
   return function()
     vim.system = orig
-  end
-end
-
--- Stubs osc.write so tests can assert on it without a real controlling
--- terminal on fd 1.
-local function stub_osc_write()
-  local writes = {}
-  local orig = osc.write
-
-  osc.write = function(bytes)
-    table.insert(writes, bytes)
-  end
-
-  return writes, function()
-    osc.write = orig
   end
 end
 
@@ -82,21 +66,6 @@ describe("zj-theme (setup)", function()
     restore()
   end)
 
-  it("applies OSC colors for the current pane on ColorScheme", function()
-    vim.api.nvim_set_hl(0, "Normal", { bg = 0x1a1b26, fg = 0xc0caf5 })
-    local restore_system = stub_system()
-    zj_theme.setup({})
-
-    local writes, restore_write = stub_osc_write()
-    vim.api.nvim_exec_autocmds("ColorScheme", { group = "ZjTheme" })
-    restore_write()
-    restore_system()
-
-    assert.equals(2, #writes)
-    assert.equals("\027]11;#1a1b26\007", writes[1])
-    assert.equals("\027]12;#c0caf5\007", writes[2])
-  end)
-
   it("leaves pane colors as-is on VimLeavePre — only polling stops", function()
     vim.api.nvim_set_hl(0, "Normal", { bg = 0x1a1b26, fg = 0xc0caf5 })
     local restore_system = stub_system()
@@ -104,14 +73,9 @@ describe("zj-theme (setup)", function()
     pane_bg.start_polling()
     assert.is_true(pane_bg.is_polling())
 
-    local writes, restore_write = stub_osc_write()
     vim.api.nvim_exec_autocmds("VimLeavePre", { group = "ZjTheme" })
-    restore_write()
     restore_system()
 
-    -- No OSC 111/112 (or any other) writes — the last-synced colors are
-    -- left in place instead of being reset to the terminal's defaults.
-    assert.equals(0, #writes)
     assert.is_false(pane_bg.is_polling())
   end)
 end)

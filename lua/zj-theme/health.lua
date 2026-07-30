@@ -100,26 +100,19 @@ function M.check()
     return
   end
 
-  vim.health.ok(
-    "the pane nvim is running in gets its background/cursor synced via raw terminal "
-      .. "escape sequences (OSC 11/12) — no `zellij` CLI needed for this part"
-  )
-
   if vim.fn.executable("zellij") == 1 then
-    vim.health.ok("`zellij` CLI found on PATH — other panes' backgrounds can be synced")
+    vim.health.ok("`zellij` CLI found on PATH — pane backgrounds can be synced")
 
     local version = zellij_version()
     if not version then
       vim.health.warn("couldn't determine the zellij version from `zellij --version`", {
-        ("Other panes' background sync needs zellij >= %s (for `set-pane-color`)"):format(
-          version_str(MIN_ZELLIJ_VERSION)
-        ),
+        ("Pane background sync needs zellij >= %s (for `set-pane-color`)"):format(version_str(MIN_ZELLIJ_VERSION)),
       })
     elseif M.zellij_version_at_least(version, MIN_ZELLIJ_VERSION) then
       vim.health.ok(("zellij %s supports `set-pane-color`"):format(version_str(version)))
     else
       vim.health.error(
-        ("zellij %s is too old for other panes' background sync (needs >= %s)"):format(
+        ("zellij %s is too old for pane background sync (needs >= %s)"):format(
           version_str(version),
           version_str(MIN_ZELLIJ_VERSION)
         ),
@@ -137,7 +130,7 @@ function M.check()
       )
     end
   else
-    vim.health.error("`zellij` CLI not found on PATH; other panes' backgrounds can't be synced", {
+    vim.health.error("`zellij` CLI not found on PATH; pane backgrounds can't be synced", {
       "Install zellij, or set sync_pane_backgrounds = false to silence this",
     })
   end

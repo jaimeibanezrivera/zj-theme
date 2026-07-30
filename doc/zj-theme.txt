@@ -46,12 +46,7 @@ Neovim >= 0.10, for the `vim.health.*` API used by |zj-theme-health|.
 
 No external plugin dependency needed — see |zj-theme-pane-backgrounds| for
 how every pane, including nvim's own, gets synced. This needs zellij >=
-0.44.0 and the `zellij` CLI on `PATH`. nvim's own pane additionally gets an
-instant best-effort color via raw terminal escapes on top of that, which
-needs a terminal that understands OSC 11/12 (most modern terminals do —
-alacritty, foot, gnome-terminal, kitty, wezterm, st, and others like them),
-but the persistent, sticks-after-nvim-exits part still needs the `zellij`
-CLI like every other pane.
+0.44.0 and the `zellij` CLI on `PATH`.
 
 ==============================================================================
 INSTALLATION                                           *zj-theme-installation*
@@ -100,9 +95,9 @@ CONFIGURATION                                         *zj-theme-configuration*
     },
 
     -- Whether to push the current colorscheme's bg/fg to every pane in the
-    -- zellij session: the pane nvim itself is running in, and every other
-    -- pane. See |zj-theme-pane-backgrounds|. Set to false to leave every
-    -- pane's background alone.
+    -- zellij session, including the one nvim itself is running in. See
+    -- |zj-theme-pane-backgrounds|. Set to false to leave every pane's
+    -- background alone.
     sync_pane_backgrounds = true,
 
     -- How often (ms) to poll for newly created zellij panes and color them
@@ -152,24 +147,16 @@ PANE BACKGROUNDS                                   *zj-theme-pane-backgrounds*
 
 Rewriting zellij's theme only changes zellij's own colors — borders, tab
 bar, status bar. It doesn't touch the background you actually see inside
-each pane. zj-theme.nvim handles that itself, both covered by the single
+each pane. zj-theme.nvim handles that itself, controlled by the
 `sync_pane_backgrounds` option:
 
-  - Every pane in the session, including the one nvim itself is running
-    in, gets recolored using a zellij command that can set a pane's
-    background directly (needs zellij 0.44 or newer). This is the
-    mechanism that actually sticks — it's a property zellij holds for
-    that pane, not something tied to nvim's own process. This part needs
-    the `zellij` command to actually be available on your system, not
-    just a zellij session to be running — `:checkhealth zj-theme` will
-    tell you if it isn't.
-  - The pane nvim is running in additionally gets an instant best-effort
-    color via raw terminal escape sequences (OSC 11/12) the moment nvim
-    starts or you switch colorscheme, so it doesn't have to wait on the
-    `zellij` CLI round-trip above. This needs a terminal that understands
-    those escapes (most modern terminals do), and is also what keeps that
-    one pane syncing at all if the `zellij` CLI is missing or too old —
-    everything else above depends on it.
+Every pane in the session, including the one nvim itself is running in,
+gets recolored using a zellij command that can set a pane's background
+directly (needs zellij 0.44 or newer). This is a property zellij holds for
+that pane, not something tied to nvim's own process, which is why it
+sticks around after nvim exits. This needs the `zellij` command to
+actually be available on your system, not just a zellij session to be
+running — `:checkhealth zj-theme` will tell you if it isn't.
 
 Colors are never reset back to zellij's own defaults — once a pane is
 colored it stays that way, including after nvim exits, until the next
@@ -177,7 +164,7 @@ colored it stays that way, including after nvim exits, until the next
 looking like your last active colorscheme everywhere, not just while nvim
 happens to be running in one of its panes.
 
-Set `sync_pane_backgrounds = false` to turn off both.
+Set `sync_pane_backgrounds = false` to turn this off.
 
 See the demo GIF in the README (assets/demo-panes.gif) for this in action.
 
@@ -212,7 +199,6 @@ Run `:checkhealth zj-theme` to check:
   - whether the currently active colorscheme has a mapping
   - whether `sync_pane_backgrounds` is active (|zj-theme-pane-backgrounds|)
   - whether the `zellij` CLI is on `PATH` and its version is new enough
-    for `set-pane-color` (only needed for the other-panes part; nvim's own
-    pane syncs regardless)
+    for `set-pane-color`
 
 vim:tw=78:ts=8:noet:ft=help:norl:

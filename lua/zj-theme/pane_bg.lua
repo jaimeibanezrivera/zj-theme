@@ -83,13 +83,10 @@ local function enabled()
 end
 
 -- Lists every real (non-plugin, non-exited) pane id in the session,
--- including the one nvim itself is running in — that pane also gets an
--- immediate best-effort color via osc.lua's raw terminal escape sequences,
--- but OSC 11/12 isn't a persistent per-pane property the way zellij's own
--- set-pane-color is: it only paints while nvim is actively driving that
--- pane's terminal, so without also coloring it here, the moment nvim exits
--- and the shell resumes, the pane reverts to zellij's plain default with
--- nothing holding the color in place. Calls on_done(ids) asynchronously.
+-- including the one nvim itself is running in — set-pane-color is a
+-- property zellij holds for the pane itself, not something tied to nvim's
+-- process, so this is what makes a pane's color (including nvim's own)
+-- survive nvim exiting. Calls on_done(ids) asynchronously.
 local function list_pane_ids(on_done)
   run_zellij_action({ "zellij", "action", "list-panes", "--json" }, function(result)
     if result.code ~= 0 then

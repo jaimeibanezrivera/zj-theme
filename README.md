@@ -29,10 +29,8 @@ See also `:help zj-theme`.
 ## Installation
 
 No external plugin dependency needed — zj-theme.nvim syncs every pane in
-the session, including the one nvim itself runs in, on its own (via the
-`zellij` CLI, plus raw terminal escape sequences for an instant update in
-nvim's own pane). See [Pane backgrounds](#pane-backgrounds) for how that
-works, and which terminals it needs.
+the session, including the one nvim itself runs in, on its own via the
+`zellij` CLI. See [Pane backgrounds](#pane-backgrounds) for how that works.
 
 ### lazy.nvim
 
@@ -154,9 +152,9 @@ require("zj-theme").setup({
   },
 
   -- Whether to push the current colorscheme's bg/fg to every pane in the
-  -- zellij session: the pane nvim itself is running in, and every other
-  -- pane. See Pane backgrounds below. Set to false to leave every pane's
-  -- background alone.
+  -- zellij session, including the one nvim itself is running in. See
+  -- Pane backgrounds below. Set to false to leave every pane's background
+  -- alone.
   sync_pane_backgrounds = true,
 
   -- How often (ms) to poll for newly created zellij panes and color them
@@ -204,25 +202,16 @@ colorschemes.
 
 Rewriting zellij's theme only changes zellij's own colors — borders, tab
 bar, status bar. It doesn't touch the background you actually see inside
-each pane. zj-theme.nvim handles that itself, both covered by the single
+each pane. zj-theme.nvim handles that itself, controlled by the
 `sync_pane_backgrounds` option:
 
-- **Every pane in the session, including the one nvim itself is running
-  in,** gets recolored using a zellij command that can set a pane's
-  background directly (needs zellij 0.44 or newer). This is the mechanism
-  that actually sticks — it's a property zellij holds for that pane, not
-  something tied to nvim's own process. This part needs the `zellij`
-  command to actually be available on your system, not just a zellij
-  session to be running — `:checkhealth zj-theme` will tell you if it
-  isn't.
-- **The pane nvim is running in** additionally gets an instant best-effort
-  color via raw terminal escape sequences (OSC 11/12) the moment nvim
-  starts or you switch colorscheme, so it doesn't have to wait on the
-  `zellij` CLI round-trip above. This needs a terminal that understands
-  those escapes (most modern terminals do — alacritty, foot,
-  gnome-terminal, kitty, wezterm, and others like them), and is also what
-  keeps that one pane syncing at all if the `zellij` CLI is missing or too
-  old — everything else in this list depends on it.
+Every pane in the session, including the one nvim itself is running in,
+gets recolored using a zellij command that can set a pane's background
+directly (needs zellij 0.44 or newer). This is a property zellij holds for
+that pane, not something tied to nvim's own process, which is why it
+sticks around after nvim exits. This needs the `zellij` command to
+actually be available on your system, not just a zellij session to be
+running — `:checkhealth zj-theme` will tell you if it isn't.
 
 Colors are never reset back to zellij's own defaults — once a pane is
 colored, it stays that way, including after nvim exits, until the next
@@ -230,7 +219,7 @@ colored, it stays that way, including after nvim exits, until the next
 looking like your last active colorscheme everywhere, not just while nvim
 happens to be running in one of its panes.
 
-Set `sync_pane_backgrounds = false` to turn off both.
+Set `sync_pane_backgrounds = false` to turn this off.
 
 ![Demo: a pane split next to nvim, and a second tab, both recoloring live as nvim's colorscheme cycles through nord, dracula, kanagawa, catppuccin-latte, catppuccin-mocha, and everforest](assets/demo-panes.gif)
 
@@ -246,11 +235,11 @@ Getting rid of that brief delay entirely would take a small companion
 living inside zellij itself, reacting the moment a pane appears instead of
 checking every second or so — see [Roadmap](#roadmap) below.
 
-My personal recommendation is to set the original background of your
-terminal as translucent as possible, that way the change of color is not
-so annoying. The original color of your terminal can be seen anyway
-between the lines of the panes, so it looks more pleasant if that is
-more translucent.
+My advice: make your terminal background as see-through as possible.
+That way the color swap won't feel so harsh. Your terminal's real
+background still shows through between the pane lines anyway, so it just
+looks better with lower opacity in general. Bonus: if you switch between
+light and dark mode with different wallpapers in your OS, this helps there too.
 
 ## Supported colorschemes
 
@@ -299,8 +288,7 @@ called, whether you're currently inside a zellij session, whether
 active colorscheme is mapped, and — for
 [Pane backgrounds](#pane-backgrounds) — whether `sync_pane_backgrounds` is
 active, plus whether the `zellij` CLI is on `PATH` and its version is new
-enough for `set-pane-color` (only needed for the other-panes part; nvim's
-own pane syncs regardless).
+enough for `set-pane-color`.
 
 ## Recommended plugins
 
@@ -312,11 +300,20 @@ own pane syncs regardless).
 ## Roadmap
 
 - **A zellij-side companion plugin.** The [polling workaround](#new-panes)
-  for newly opened panes works, but it's a stopgap — a real fix would be a
+  for newly opened panes works, but it's a temporary fix — a real fix would be a
   small plugin running inside zellij itself (via the `zellij-tile` WASM
-  plugin API) that reacts to a pane appearing instead of checking for it
-  every second or so. No polling, no lag. Nothing exists for this yet, but
-  it's on my list to eventually build.
+  plugin API) that reacts to a pane appearing instead of polling.
+  Nothing exists for this yet, but  it's on my list to eventually build.
+- **Open to other ideas.** If you've got a suggestion beyond the zellij-side
+  companion above, open an issue — happy to hear it out.
+
+## Contributing
+
+Want to dig into the code or send a PR? See
+[ARCHITECTURE.md](ARCHITECTURE.md) for a developer-facing walkthrough of
+how the plugin is put together — the module breakdown, the event/data flow
+through `setup()` and `apply_all()`, and diagrams for each of the two sync
+mechanisms (zellij's own theme, every pane's background).
 
 ## License
 
