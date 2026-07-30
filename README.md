@@ -28,11 +28,11 @@ See also `:help zj-theme`.
 
 ## Installation
 
-No external plugin dependency needed — zj-theme.nvim syncs both the pane
-nvim itself runs in (via raw terminal escape sequences) and every other
-pane in the session (via the `zellij` CLI) on its own. See
-[Pane backgrounds](#pane-backgrounds) for how that works, and which
-terminals it needs.
+No external plugin dependency needed — zj-theme.nvim syncs every pane in
+the session, including the one nvim itself runs in, on its own (via the
+`zellij` CLI, plus raw terminal escape sequences for an instant update in
+nvim's own pane). See [Pane backgrounds](#pane-backgrounds) for how that
+works, and which terminals it needs.
 
 ### lazy.nvim
 
@@ -205,19 +205,24 @@ colorschemes.
 Rewriting zellij's theme only changes zellij's own colors — borders, tab
 bar, status bar. It doesn't touch the background you actually see inside
 each pane. zj-theme.nvim handles that itself, both covered by the single
-`sync_pane_backgrounds` option, via two different mechanisms under the hood:
+`sync_pane_backgrounds` option:
 
-- **The pane nvim is running in** gets its background and cursor color set
-  directly, via raw terminal escape sequences (OSC 11/12) — no separate
-  plugin needed. This needs a terminal that understands those escapes;
-  that's most modern terminals (alacritty, foot, gnome-terminal, kitty,
-  wezterm, and others like them). No `zellij` CLI or version requirement —
-  this part keeps working even if that's missing.
-- **Every other pane** in the session gets recolored using a zellij command
-  that can set a pane's background directly (needs zellij 0.44 or newer).
-  This part needs the `zellij` command to actually be available on your
-  system, not just a zellij session to be running — `:checkhealth zj-theme`
-  will tell you if it isn't.
+- **Every pane in the session, including the one nvim itself is running
+  in,** gets recolored using a zellij command that can set a pane's
+  background directly (needs zellij 0.44 or newer). This is the mechanism
+  that actually sticks — it's a property zellij holds for that pane, not
+  something tied to nvim's own process. This part needs the `zellij`
+  command to actually be available on your system, not just a zellij
+  session to be running — `:checkhealth zj-theme` will tell you if it
+  isn't.
+- **The pane nvim is running in** additionally gets an instant best-effort
+  color via raw terminal escape sequences (OSC 11/12) the moment nvim
+  starts or you switch colorscheme, so it doesn't have to wait on the
+  `zellij` CLI round-trip above. This needs a terminal that understands
+  those escapes (most modern terminals do — alacritty, foot,
+  gnome-terminal, kitty, wezterm, and others like them), and is also what
+  keeps that one pane syncing at all if the `zellij` CLI is missing or too
+  old — everything else in this list depends on it.
 
 Colors are never reset back to zellij's own defaults — once a pane is
 colored, it stays that way, including after nvim exits, until the next

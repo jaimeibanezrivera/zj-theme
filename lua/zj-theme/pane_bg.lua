@@ -82,10 +82,15 @@ local function enabled()
   return config.options.sync_pane_backgrounds ~= false and sync.in_zellij_session()
 end
 
--- Lists every real (non-plugin, non-exited) pane id in the session, other
--- than `except_id` (typically the current pane — osc.lua handles that one
--- directly via terminal escape sequences). Calls on_done(ids) asynchronously.
-local function list_other_pane_ids(except_id, on_done)
+-- Lists every real (non-plugin, non-exited) pane id in the session,
+-- including the one nvim itself is running in — that pane also gets an
+-- immediate best-effort color via osc.lua's raw terminal escape sequences,
+-- but OSC 11/12 isn't a persistent per-pane property the way zellij's own
+-- set-pane-color is: it only paints while nvim is actively driving that
+-- pane's terminal, so without also coloring it here, the moment nvim exits
+-- and the shell resumes, the pane reverts to zellij's plain default with
+-- nothing holding the color in place. Calls on_done(ids) asynchronously.
+local function list_pane_ids(on_done)
   run_zellij_action({ "zellij", "action", "list-panes", "--json" }, function(result)
     if result.code ~= 0 then
       vim.schedule(function()
@@ -107,7 +112,7 @@ local function list_other_pane_ids(except_id, on_done)
 
     local ids = {}
     for _, pane in ipairs(panes) do
-      if not pane.is_plugin and not pane.exited and tostring(pane.id) ~= tostring(except_id) then
+      if not pane.is_plugin and not pane.exited then
         table.insert(ids, pane.id)
       end
     end
@@ -137,9 +142,10 @@ local function set_pane_color(id, extra_args, on_done)
   end)
 end
 
--- Pushes the current colorscheme's bg/fg to every other pane in the zellij
--- session, via `zellij action set-pane-color`. No-op outside zellij, when
--- sync_pane_backgrounds is disabled, or when Normal has no bg/fg set.
+-- Pushes the current colorscheme's bg/fg to every pane in the zellij
+-- session (including the one nvim itself runs in), via `zellij action
+-- set-pane-color`. No-op outside zellij, when sync_pane_backgrounds is
+-- disabled, or when Normal has no bg/fg set.
 function M.apply()
   if not enabled() then
     return
@@ -150,7 +156,7 @@ function M.apply()
     return
   end
 
-  list_other_pane_ids(vim.env.ZELLIJ_PANE_ID, function(ids)
+  list_pane_ids(function(ids)
     for _, id in ipairs(ids) do
       set_pane_color(id, { "--bg", bg, "--fg", fg }, function(ok)
         if ok then
@@ -175,7 +181,7 @@ function M.poll()
     return
   end
 
-  list_other_pane_ids(vim.env.ZELLIJ_PANE_ID, function(ids)
+  list_pane_ids(function(ids)
     for _, id in ipairs(ids) do
       if not known_ids[id] and not pending_ids[id] then
         pending_ids[id] = true

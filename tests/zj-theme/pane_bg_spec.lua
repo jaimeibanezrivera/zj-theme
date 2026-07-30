@@ -88,7 +88,7 @@ describe("zj-theme.pane_bg", function()
   end)
 
   local panes = {
-    { id = 1, is_plugin = false, exited = false }, -- current pane, excluded
+    { id = 1, is_plugin = false, exited = false }, -- current pane (nvim's own) — included too
     { id = 2, is_plugin = false, exited = false }, -- a sibling terminal pane
     { id = 3, is_plugin = false, exited = false }, -- another sibling terminal pane
     { id = 4, is_plugin = true, exited = false }, -- zellij's own status-bar plugin pane
@@ -96,7 +96,12 @@ describe("zj-theme.pane_bg", function()
   }
 
   describe("apply", function()
-    it("sets bg/fg on every other real, non-exited pane", function()
+    it("sets bg/fg on every real, non-exited pane, including the one nvim runs in", function()
+      -- Regression test: the pane nvim runs in used to be excluded here and
+      -- left to osc.lua's raw terminal escapes alone, but OSC 11/12 isn't a
+      -- persistent per-pane property — once nvim exits, that pane reverted
+      -- to zellij's plain default with nothing holding the color. It must
+      -- get set-pane-color too, exactly like every other pane.
       local calls, restore = stub_system(json_panes(panes))
       pane_bg.apply()
       restore()
@@ -106,14 +111,18 @@ describe("zj-theme.pane_bg", function()
         return a[5] < b[5]
       end)
 
-      assert.equals(2, #set_calls)
+      assert.equals(3, #set_calls)
       assert.same(
-        { "zellij", "action", "set-pane-color", "-p", "2", "--bg", "#1a1b26", "--fg", "#c0caf5" },
+        { "zellij", "action", "set-pane-color", "-p", "1", "--bg", "#1a1b26", "--fg", "#c0caf5" },
         set_calls[1]
       )
       assert.same(
-        { "zellij", "action", "set-pane-color", "-p", "3", "--bg", "#1a1b26", "--fg", "#c0caf5" },
+        { "zellij", "action", "set-pane-color", "-p", "2", "--bg", "#1a1b26", "--fg", "#c0caf5" },
         set_calls[2]
+      )
+      assert.same(
+        { "zellij", "action", "set-pane-color", "-p", "3", "--bg", "#1a1b26", "--fg", "#c0caf5" },
+        set_calls[3]
       )
     end)
 
@@ -157,19 +166,19 @@ describe("zj-theme.pane_bg", function()
   end)
 
   describe("poll", function()
-    it("colors every other pane on the first poll, same as apply", function()
+    it("colors every pane on the first poll, same as apply", function()
       local calls, restore = stub_system(json_panes(panes))
       pane_bg.poll()
       restore()
 
-      assert.equals(2, #set_pane_color_calls(calls))
+      assert.equals(3, #set_pane_color_calls(calls))
     end)
 
     it("does not re-color panes already synced by a previous apply", function()
       local apply_calls, restore1 = stub_system(json_panes(panes))
       pane_bg.apply()
       restore1()
-      assert.equals(2, #set_pane_color_calls(apply_calls))
+      assert.equals(3, #set_pane_color_calls(apply_calls))
 
       -- Same panes, nothing new — poll should be a no-op set-pane-color-wise.
       local poll_calls, restore2 = stub_system(json_panes(panes))
@@ -238,10 +247,10 @@ describe("zj-theme.pane_bg", function()
         pane_bg.poll() -- A: dispatches list-panes(A)
         pane_bg.poll() -- B: list-panes(B) queues up behind A's, not dispatched yet
 
-        resolve_next(json_panes(panes)) -- A's list-panes resolves and queues set-pane-color for 2 and 3,
+        resolve_next(json_panes(panes)) -- A's list-panes resolves and queues set-pane-color for 1, 2, and 3,
         -- but the FIFO action queue runs already-queued list-panes(B) next
         resolve_next(json_panes(panes)) -- B's list-panes resolves; pending_ids must stop it from
-        -- re-queuing 2/3 even though known_ids isn't set for them yet
+        -- re-queuing 1/2/3 even though known_ids isn't set for them yet
 
         -- Drain whatever set-pane-color calls are left in the queue.
         while in_flight() > 0 do
@@ -252,9 +261,10 @@ describe("zj-theme.pane_bg", function()
         table.sort(set_calls, function(a, b)
           return a[5] < b[5]
         end)
-        assert.equals(2, #set_calls) -- one call per pane, not duplicated by B
-        assert.equals("2", set_calls[1][5])
-        assert.equals("3", set_calls[2][5])
+        assert.equals(3, #set_calls) -- one call per pane, not duplicated by B
+        assert.equals("1", set_calls[1][5])
+        assert.equals("2", set_calls[2][5])
+        assert.equals("3", set_calls[3][5])
 
         restore()
       end
@@ -318,11 +328,11 @@ describe("zj-theme.pane_bg", function()
       resolve_next(json_panes(panes))
 
       -- Resolving list-panes must dispatch exactly one set-pane-color call,
-      -- not both sibling panes' calls at once.
+      -- not all three panes' calls at once.
       assert.equals(2, #calls)
       assert.equals(1, in_flight())
       assert.equals("set-pane-color", calls[2][3])
-      assert.equals("2", calls[2][5])
+      assert.equals("1", calls[2][5])
 
       resolve_next({ code = 0, stdout = "", stderr = "" })
 
@@ -330,11 +340,19 @@ describe("zj-theme.pane_bg", function()
       assert.equals(3, #calls)
       assert.equals(1, in_flight())
       assert.equals("set-pane-color", calls[3][3])
-      assert.equals("3", calls[3][5])
+      assert.equals("2", calls[3][5])
 
       resolve_next({ code = 0, stdout = "", stderr = "" })
 
-      assert.equals(3, #calls)
+      -- Same again for the third pane.
+      assert.equals(4, #calls)
+      assert.equals(1, in_flight())
+      assert.equals("set-pane-color", calls[4][3])
+      assert.equals("3", calls[4][5])
+
+      resolve_next({ code = 0, stdout = "", stderr = "" })
+
+      assert.equals(4, #calls)
       assert.equals(0, in_flight())
 
       restore()
