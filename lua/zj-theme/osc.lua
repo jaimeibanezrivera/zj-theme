@@ -55,14 +55,4 @@ function M.apply()
   M.write(osc("12", fg))
 end
 
--- Restores the terminal's own default background/cursor color.
-function M.reset()
-  if not enabled() then
-    return
-  end
-
-  M.write(osc("111"))
-  M.write(osc("112"))
-end
-
 return M

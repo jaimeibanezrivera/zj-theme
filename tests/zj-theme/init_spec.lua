@@ -97,18 +97,21 @@ describe("zj-theme (setup)", function()
     assert.equals("\027]12;#c0caf5\007", writes[2])
   end)
 
-  it("resets OSC colors for the current pane on VimLeavePre", function()
+  it("leaves pane colors as-is on VimLeavePre — only polling stops", function()
     vim.api.nvim_set_hl(0, "Normal", { bg = 0x1a1b26, fg = 0xc0caf5 })
     local restore_system = stub_system()
     zj_theme.setup({})
+    pane_bg.start_polling()
+    assert.is_true(pane_bg.is_polling())
 
     local writes, restore_write = stub_osc_write()
     vim.api.nvim_exec_autocmds("VimLeavePre", { group = "ZjTheme" })
     restore_write()
     restore_system()
 
-    assert.equals(2, #writes)
-    assert.equals("\027]111\007", writes[1])
-    assert.equals("\027]112\007", writes[2])
+    -- No OSC 111/112 (or any other) writes — the last-synced colors are
+    -- left in place instead of being reset to the terminal's defaults.
+    assert.equals(0, #writes)
+    assert.is_false(pane_bg.is_polling())
   end)
 end)

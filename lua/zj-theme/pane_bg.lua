@@ -6,10 +6,17 @@ local M = {}
 
 local warned = {}
 
--- Pane ids already colored by a prior apply()/poll() call, so poll() only
--- has to act on panes that showed up since then instead of re-sending
--- set-pane-color to every pane on every tick.
+-- Pane ids successfully colored by a prior apply()/poll() call, so poll()
+-- only has to act on panes that showed up since then instead of re-sending
+-- set-pane-color to every pane on every tick. A pane is only added here once
+-- its set-pane-color call actually succeeds, so a failed attempt gets
+-- retried by the next poll() rather than being silently forgotten.
 local known_ids = {}
+
+-- Pane ids with a set-pane-color call currently queued/in-flight, so poll()
+-- doesn't dispatch a second one for the same pane while the first hasn't
+-- resolved yet (it isn't in known_ids until it succeeds).
+local pending_ids = {}
 
 local timer = nil
 
@@ -66,6 +73,7 @@ end
 function M.reset_warnings()
   warned = {}
   known_ids = {}
+  pending_ids = {}
   action_queue = {}
   action_running = false
 end
@@ -107,11 +115,14 @@ local function list_other_pane_ids(except_id, on_done)
   end)
 end
 
-local function set_pane_color(id, extra_args)
+-- Calls on_done(ok) once the call resolves, so callers can decide what
+-- "successfully colored" means for their own bookkeeping (known_ids).
+local function set_pane_color(id, extra_args, on_done)
   local cmd = { "zellij", "action", "set-pane-color", "-p", tostring(id) }
   vim.list_extend(cmd, extra_args)
   run_zellij_action(cmd, function(result)
-    if result.code ~= 0 then
+    local ok = result.code == 0
+    if not ok then
       vim.schedule(function()
         notify_once(
           "set_pane_color_failed",
@@ -119,6 +130,9 @@ local function set_pane_color(id, extra_args)
           vim.log.levels.ERROR
         )
       end)
+    end
+    if on_done then
+      on_done(ok)
     end
   end)
 end
@@ -138,8 +152,11 @@ function M.apply()
 
   list_other_pane_ids(vim.env.ZELLIJ_PANE_ID, function(ids)
     for _, id in ipairs(ids) do
-      known_ids[id] = true
-      set_pane_color(id, { "--bg", bg, "--fg", fg })
+      set_pane_color(id, { "--bg", bg, "--fg", fg }, function(ok)
+        if ok then
+          known_ids[id] = true
+        end
+      end)
     end
   end)
 end
@@ -160,24 +177,15 @@ function M.poll()
 
   list_other_pane_ids(vim.env.ZELLIJ_PANE_ID, function(ids)
     for _, id in ipairs(ids) do
-      if not known_ids[id] then
-        known_ids[id] = true
-        set_pane_color(id, { "--bg", bg, "--fg", fg })
+      if not known_ids[id] and not pending_ids[id] then
+        pending_ids[id] = true
+        set_pane_color(id, { "--bg", bg, "--fg", fg }, function(ok)
+          pending_ids[id] = nil
+          if ok then
+            known_ids[id] = true
+          end
+        end)
       end
-    end
-  end)
-end
-
--- Resets every other pane's color to zellij's own defaults, mirroring
--- osc.lua's reset-on-exit behavior for the current pane.
-function M.reset()
-  if not enabled() then
-    return
-  end
-
-  list_other_pane_ids(vim.env.ZELLIJ_PANE_ID, function(ids)
-    for _, id in ipairs(ids) do
-      set_pane_color(id, { "--reset" })
     end
   end)
 end

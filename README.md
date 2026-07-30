@@ -163,7 +163,7 @@ require("zj-theme").setup({
   -- to match the current colorscheme — otherwise a pane opened after a
   -- `:colorscheme` switch keeps zellij's default background until the next
   -- one. Set to 0 to disable polling. Depends on the sync_pane_backgrounds
-  -- option. Not recomended to lower the number below the default value.
+  -- option. Not recommended to lower the number below the default value.
   pane_poll_interval_ms = 1000,
 
   -- Set to false to silence vim.notify warnings/errors.
@@ -208,17 +208,22 @@ each pane. zj-theme.nvim handles that itself, both covered by the single
 `sync_pane_backgrounds` option, via two different mechanisms under the hood:
 
 - **The pane nvim is running in** gets its background and cursor color set
-  directly, via raw terminal escape sequences (OSC 11/12, reset on exit via
-  OSC 111/112) — no separate plugin needed. This needs a terminal that
-  understands those escapes; that's most modern terminals (alacritty, foot,
-  gnome-terminal, kitty, wezterm, and others like them). No `zellij` CLI or
-  version requirement — this part keeps working even if that's missing.
+  directly, via raw terminal escape sequences (OSC 11/12) — no separate
+  plugin needed. This needs a terminal that understands those escapes;
+  that's most modern terminals (alacritty, foot, gnome-terminal, kitty,
+  wezterm, and others like them). No `zellij` CLI or version requirement —
+  this part keeps working even if that's missing.
 - **Every other pane** in the session gets recolored using a zellij command
   that can set a pane's background directly (needs zellij 0.44 or newer).
-  Colors get put back to normal when nvim exits. This part needs the
-  `zellij` command to actually be available on your system, not just a
-  zellij session to be running — `:checkhealth zj-theme` will tell you if
-  it isn't.
+  This part needs the `zellij` command to actually be available on your
+  system, not just a zellij session to be running — `:checkhealth zj-theme`
+  will tell you if it isn't.
+
+Colors are never reset back to zellij's own defaults — once a pane is
+colored, it stays that way, including after nvim exits, until the next
+`:colorscheme` switch recolors it again. The goal is a session that keeps
+looking like your last active colorscheme everywhere, not just while nvim
+happens to be running in one of its panes.
 
 Set `sync_pane_backgrounds = false` to turn off both.
 
@@ -236,7 +241,7 @@ Getting rid of that brief delay entirely would take a small companion
 living inside zellij itself, reacting the moment a pane appears instead of
 checking every second or so — see [Roadmap](#roadmap) below.
 
-My personal recomendation is to set the original background of your
+My personal recommendation is to set the original background of your
 terminal as translucent as possible, that way the change of color is not
 so annoying. The original color of your terminal can be seen anyway
 between the lines of the panes, so it looks more pleasant if that is

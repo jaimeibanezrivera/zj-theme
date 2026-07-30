@@ -156,23 +156,6 @@ describe("zj-theme.pane_bg", function()
     end)
   end)
 
-  describe("reset", function()
-    it("resets every other real, non-exited pane", function()
-      local calls, restore = stub_system(json_panes(panes))
-      pane_bg.reset()
-      restore()
-
-      local set_calls = set_pane_color_calls(calls)
-      table.sort(set_calls, function(a, b)
-        return a[5] < b[5]
-      end)
-
-      assert.equals(2, #set_calls)
-      assert.same({ "zellij", "action", "set-pane-color", "-p", "2", "--reset" }, set_calls[1])
-      assert.same({ "zellij", "action", "set-pane-color", "-p", "3", "--reset" }, set_calls[2])
-    end)
-  end)
-
   describe("poll", function()
     it("colors every other pane on the first poll, same as apply", function()
       local calls, restore = stub_system(json_panes(panes))
@@ -215,6 +198,67 @@ describe("zj-theme.pane_bg", function()
         set_calls[1]
       )
     end)
+
+    it("retries a pane on the next poll after its set-pane-color call failed", function()
+      local orig_system = vim.system
+      vim.system = function(cmd, _opts, callback)
+        if cmd[3] == "list-panes" then
+          callback(json_panes(panes))
+        elseif cmd[3] == "set-pane-color" and cmd[5] == "2" then
+          callback({ code = 1, stdout = "", stderr = "boom" }) -- pane 2 fails
+        else
+          callback({ code = 0, stdout = "", stderr = "" }) -- pane 3 succeeds
+        end
+      end
+      local orig_notify = vim.notify
+      vim.notify = function() end -- silence the expected set_pane_color_failed warning
+
+      pane_bg.apply()
+
+      vim.notify = orig_notify
+      vim.system = orig_system
+
+      -- Pane 2 never made it into known_ids (its call failed), so it's
+      -- retried; pane 3 succeeded and is left alone.
+      local calls, restore = stub_system(json_panes(panes))
+      pane_bg.poll()
+      restore()
+
+      local set_calls = set_pane_color_calls(calls)
+      assert.equals(1, #set_calls)
+      assert.equals("2", set_calls[1][5])
+    end)
+
+    it(
+      "does not queue a duplicate set-pane-color for a pane when a second poll's "
+        .. "list-panes resolves while an earlier poll's calls for it are still queued",
+      function()
+        local calls, resolve_next, in_flight, restore = stub_system_async()
+
+        pane_bg.poll() -- A: dispatches list-panes(A)
+        pane_bg.poll() -- B: list-panes(B) queues up behind A's, not dispatched yet
+
+        resolve_next(json_panes(panes)) -- A's list-panes resolves and queues set-pane-color for 2 and 3,
+        -- but the FIFO action queue runs already-queued list-panes(B) next
+        resolve_next(json_panes(panes)) -- B's list-panes resolves; pending_ids must stop it from
+        -- re-queuing 2/3 even though known_ids isn't set for them yet
+
+        -- Drain whatever set-pane-color calls are left in the queue.
+        while in_flight() > 0 do
+          resolve_next({ code = 0, stdout = "", stderr = "" })
+        end
+
+        local set_calls = set_pane_color_calls(calls)
+        table.sort(set_calls, function(a, b)
+          return a[5] < b[5]
+        end)
+        assert.equals(2, #set_calls) -- one call per pane, not duplicated by B
+        assert.equals("2", set_calls[1][5])
+        assert.equals("3", set_calls[2][5])
+
+        restore()
+      end
+    )
   end)
 
   describe("polling lifecycle", function()

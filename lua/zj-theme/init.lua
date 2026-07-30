@@ -44,20 +44,21 @@ function M.setup(opts)
     end,
   })
 
-  -- Resets every pane this plugin recolored — the current one (via raw
-  -- terminal escapes) and every other one (via the zellij CLI) — back to
-  -- the terminal's/zellij's own defaults.
+  -- Stops polling for new panes — nvim isn't around to color them anymore.
+  -- Pane colors themselves are deliberately left as they are: the point of
+  -- this plugin is a session that keeps looking like the last active
+  -- colorscheme everywhere, not just while nvim happens to be running in
+  -- one of its panes.
   vim.api.nvim_create_autocmd({ "VimLeavePre", "VimSuspend" }, {
     group = augroup,
     callback = function()
       pane_bg.stop_polling()
-      pane_bg.reset()
-      osc.reset()
     end,
   })
 
-  -- Undoes the VimSuspend handling above: resume syncing and polling once
-  -- nvim is foregrounded again.
+  -- Undoes the VimSuspend handling above: resume polling once nvim is
+  -- foregrounded again (also re-applies colors, a cheap no-op if nothing
+  -- changed while suspended).
   vim.api.nvim_create_autocmd("VimResume", {
     group = augroup,
     callback = function()
