@@ -1,42 +1,8 @@
 local config = require("zj-theme.config")
 local sync = require("zj-theme.sync")
+local terminal = require("zj-theme.terminal")
 
 local M = {}
-
--- `set-pane-color` (used by pane_bg.lua) was added in this zellij release.
-local MIN_ZELLIJ_VERSION = { 0, 44, 0 }
-
-local function version_str(v)
-  return ("%d.%d.%d"):format(v[1], v[2], v[3])
-end
-
--- Pulls the first `X.Y.Z` out of `zellij --version` output (e.g.
--- "zellij 0.44.1"). Returns nil if none is found. Exposed for tests.
-function M.parse_zellij_version(output)
-  local major, minor, patch = (output or ""):match("(%d+)%.(%d+)%.(%d+)")
-  if not major then
-    return nil
-  end
-  return { tonumber(major), tonumber(minor), tonumber(patch) }
-end
-
--- Exposed for tests.
-function M.zellij_version_at_least(version, minimum)
-  for i = 1, 3 do
-    if version[i] ~= minimum[i] then
-      return version[i] > minimum[i]
-    end
-  end
-  return true
-end
-
-local function zellij_version()
-  local result = vim.system({ "zellij", "--version" }, { text = true }):wait(2000)
-  if result.code ~= 0 then
-    return nil
-  end
-  return M.parse_zellij_version(result.stdout)
-end
 
 function M.check()
   vim.health.start("zj-theme")
@@ -56,7 +22,7 @@ function M.check()
   else
     vim.health.info(
       "Not running inside a zellij session ($ZELLIJ unset) — this is normal outside zellij; "
-        .. "sync is a no-op until you're inside one"
+        .. "the zellij-theme channel is a no-op until you're inside one"
     )
   end
 
@@ -95,44 +61,58 @@ function M.check()
     end
   end
 
-  if config.options.sync_pane_backgrounds == false then
-    vim.health.info("sync_pane_backgrounds is disabled; no pane's background will be synced")
+  if not config.options.terminal.emulator then
+    vim.health.info("terminal.emulator is unset; the terminal-theme channel is disabled")
     return
   end
 
-  if vim.fn.executable("zellij") == 1 then
-    vim.health.ok("`zellij` CLI found on PATH — pane backgrounds can be synced")
-
-    local version = zellij_version()
-    if not version then
-      vim.health.warn("couldn't determine the zellij version from `zellij --version`", {
-        ("Pane background sync needs zellij >= %s (for `set-pane-color`)"):format(version_str(MIN_ZELLIJ_VERSION)),
-      })
-    elseif M.zellij_version_at_least(version, MIN_ZELLIJ_VERSION) then
-      vim.health.ok(("zellij %s supports `set-pane-color`"):format(version_str(version)))
-    else
-      vim.health.error(
-        ("zellij %s is too old for pane background sync (needs >= %s)"):format(
-          version_str(version),
-          version_str(MIN_ZELLIJ_VERSION)
-        ),
-        { "Upgrade zellij, or set sync_pane_backgrounds = false to silence this" }
-      )
-    end
-
-    local interval = config.options.pane_poll_interval_ms
-    if interval and interval > 0 then
-      vim.health.info(("New panes are picked up within %dms (pane_poll_interval_ms)"):format(interval))
-    else
-      vim.health.info(
-        "pane_poll_interval_ms <= 0; panes created between colorscheme "
-          .. "switches won't be synced until the next one"
-      )
-    end
-  else
-    vim.health.error("`zellij` CLI not found on PATH; pane backgrounds can't be synced", {
-      "Install zellij, or set sync_pane_backgrounds = false to silence this",
+  local adapter = terminal.adapter()
+  if not adapter then
+    vim.health.error(("terminal.emulator '%s' is not supported"):format(config.options.terminal.emulator), {
+      "Use one of the adapters in lua/zj-theme/terminals/ (currently: wezterm, alacritty)",
     })
+    return
+  end
+
+  vim.health.ok(("terminal.emulator '%s' is supported"):format(config.options.terminal.emulator))
+
+  local term_path = terminal.config_path(adapter)
+  if not term_path then
+    vim.health.error("terminal.config_path is not set — required once terminal.emulator is", {
+      "Set terminal.config_path in setup() — see README's Terminal emulator theme section",
+    })
+    return
+  end
+
+  local dir = vim.fn.fnamemodify(term_path, ":h")
+  if vim.fn.isdirectory(dir) == 1 then
+    vim.health.ok(("this plugin writes the resolved theme to '%s'"):format(term_path))
+  else
+    vim.health.error(("directory '%s' does not exist; can't write '%s'"):format(dir, term_path), {
+      "Create that directory, or point terminal.config_path somewhere that exists",
+    })
+  end
+
+  if colors_name and colors_name ~= "" then
+    local term_theme = terminal.resolve_theme(adapter, colors_name)
+    if term_theme then
+      vim.health.ok(
+        ("colorscheme '%s' is mapped to %s theme '%s'"):format(
+          colors_name,
+          config.options.terminal.emulator,
+          term_theme
+        )
+      )
+    else
+      vim.health.warn(
+        ("colorscheme '%s' has no %s mapping; will fall back to '%s'"):format(
+          colors_name,
+          config.options.terminal.emulator,
+          terminal.default_theme(adapter)
+        ),
+        { "Add an entry to terminal.mappings in setup(), or accept the fallback" }
+      )
+    end
   end
 end
 

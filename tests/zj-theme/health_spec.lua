@@ -1,5 +1,6 @@
 local config = require("zj-theme.config")
 local health = require("zj-theme.health")
+local wezterm_adapter = require("zj-theme.terminals.wezterm")
 
 local function write_temp_config(lines)
   local path = vim.fn.tempname()
@@ -39,38 +40,6 @@ local function find(calls, level, pattern)
     end
   end
   return nil
-end
-
--- Forces vim.fn.executable("zellij") to a known value, so the version-check
--- branch runs (or doesn't) regardless of whether the machine running the
--- tests actually has zellij installed (CI doesn't).
-local function stub_executable(zellij_available)
-  local orig = vim.fn.executable
-  vim.fn.executable = function(name)
-    if name == "zellij" then
-      return zellij_available and 1 or 0
-    end
-    return orig(name)
-  end
-  return function()
-    vim.fn.executable = orig
-  end
-end
-
--- Stubs vim.system for the synchronous `:wait()` pattern health.lua uses to
--- read `zellij --version`, so tests never shell out to a real binary.
-local function stub_system_version(result)
-  local orig = vim.system
-  vim.system = function(_cmd, _opts)
-    return {
-      wait = function()
-        return result
-      end,
-    }
-  end
-  return function()
-    vim.system = orig
-  end
 end
 
 describe("zj-theme.health", function()
@@ -172,97 +141,110 @@ describe("zj-theme.health", function()
     assert.truthy(find(calls, "warn", "'some%-unmapped%-theme' has no mapping"))
   end)
 
-  describe("zellij version check", function()
-    it("reports ok when the installed zellij is new enough", function()
-      local restore_exec = stub_executable(true)
-      local restore_sys = stub_system_version({ code = 0, stdout = "zellij 0.44.1\n", stderr = "" })
-
-      local calls, restore_health = capture_health()
-      health.check()
-      restore_health()
-      restore_sys()
-      restore_exec()
-
-      assert.truthy(find(calls, "ok", "zellij 0%.44%.1 supports"))
-    end)
-
-    it("reports error when the installed zellij is too old", function()
-      local restore_exec = stub_executable(true)
-      local restore_sys = stub_system_version({ code = 0, stdout = "zellij 0.40.0\n", stderr = "" })
-
-      local calls, restore_health = capture_health()
-      health.check()
-      restore_health()
-      restore_sys()
-      restore_exec()
-
-      assert.truthy(find(calls, "error", "zellij 0%.40%.0 is too old"))
-    end)
-
-    it("reports warn when the zellij version can't be determined", function()
-      local restore_exec = stub_executable(true)
-      local restore_sys = stub_system_version({ code = 1, stdout = "", stderr = "not found" })
-
-      local calls, restore_health = capture_health()
-      health.check()
-      restore_health()
-      restore_sys()
-      restore_exec()
-
-      assert.truthy(find(calls, "warn", "couldn't determine the zellij version"))
-    end)
-
-    it("doesn't run at all when the zellij CLI isn't on PATH", function()
-      local restore_exec = stub_executable(false)
-
-      local calls, restore_health = capture_health()
-      health.check()
-      restore_health()
-      restore_exec()
-
-      assert.is_nil(find(calls, "ok", "supports `set%-pane%-color`"))
-      assert.is_nil(find(calls, "error", "too old"))
-    end)
-  end)
-
-  describe("sync_pane_backgrounds disabled", function()
+  describe("terminal.emulator unset", function()
     it("reports a single info and skips everything else", function()
-      config.setup({ sync_pane_backgrounds = false })
       local calls, restore = capture_health()
       health.check()
       restore()
 
-      assert.truthy(find(calls, "info", "sync_pane_backgrounds is disabled"))
-      assert.is_nil(find(calls, "ok", "zellij` CLI found on PATH"))
+      assert.truthy(find(calls, "info", "terminal.emulator is unset"))
+      assert.is_nil(find(calls, "ok", "terminal.emulator '.-' is supported"))
     end)
   end)
-end)
 
-describe("zj-theme.health.parse_zellij_version", function()
-  it("parses a version out of `zellij --version` output", function()
-    assert.same({ 0, 44, 1 }, health.parse_zellij_version("zellij 0.44.1\n"))
-  end)
+  describe("terminal.emulator set", function()
+    it("reports error for an unknown terminal.emulator", function()
+      config.setup({
+        zellij_config_path = temp_config_path,
+        terminal = { emulator = "not-a-real-terminal" },
+      })
+      local calls, restore = capture_health()
+      health.check()
+      restore()
 
-  it("returns nil when no version-shaped substring is found", function()
-    assert.is_nil(health.parse_zellij_version("not a version"))
-    assert.is_nil(health.parse_zellij_version(""))
-    assert.is_nil(health.parse_zellij_version(nil))
-  end)
-end)
+      assert.truthy(find(calls, "error", "not supported"))
+    end)
 
-describe("zj-theme.health.zellij_version_at_least", function()
-  it("is true when equal", function()
-    assert.is_true(health.zellij_version_at_least({ 0, 44, 0 }, { 0, 44, 0 }))
-  end)
+    it("reports ok for a known terminal.emulator with a writable directory", function()
+      local term_path = vim.fn.tempname()
+      config.setup({
+        zellij_config_path = temp_config_path,
+        terminal = { emulator = "wezterm", config_path = term_path },
+      })
+      local calls, restore = capture_health()
+      health.check()
+      restore()
 
-  it("is true when greater", function()
-    assert.is_true(health.zellij_version_at_least({ 0, 44, 1 }, { 0, 44, 0 }))
-    assert.is_true(health.zellij_version_at_least({ 0, 45, 0 }, { 0, 44, 0 }))
-    assert.is_true(health.zellij_version_at_least({ 1, 0, 0 }, { 0, 44, 0 }))
-  end)
+      assert.truthy(find(calls, "ok", "terminal.emulator 'wezterm' is supported"))
+      assert.truthy(find(calls, "ok", "writes the resolved theme"))
+    end)
 
-  it("is false when lesser", function()
-    assert.is_false(health.zellij_version_at_least({ 0, 43, 9 }, { 0, 44, 0 }))
-    assert.is_false(health.zellij_version_at_least({ 0, 44, 0 }, { 0, 44, 1 }))
+    it("reports error when config_path is unset and the adapter has no default", function()
+      local orig_default = wezterm_adapter.default_config_path
+      wezterm_adapter.default_config_path = nil
+      config.setup({ zellij_config_path = temp_config_path, terminal = { emulator = "wezterm" } })
+      local calls, restore = capture_health()
+      health.check()
+      restore()
+      wezterm_adapter.default_config_path = orig_default
+
+      assert.truthy(find(calls, "error", "terminal.config_path is not set"))
+    end)
+
+    it("reports ok using the adapter's default_config_path when terminal.config_path is unset", function()
+      local orig_default = wezterm_adapter.default_config_path
+      local tmp_dir = vim.fn.tempname()
+      vim.fn.mkdir(tmp_dir, "p")
+      wezterm_adapter.default_config_path = tmp_dir .. "/zj-theme.lua"
+      config.setup({ zellij_config_path = temp_config_path, terminal = { emulator = "wezterm" } })
+
+      local calls, restore = capture_health()
+      health.check()
+      restore()
+      wezterm_adapter.default_config_path = orig_default
+      vim.fn.delete(tmp_dir, "rf")
+
+      assert.truthy(find(calls, "ok", "writes the resolved theme"))
+    end)
+
+    it("reports error when the managed file's directory doesn't exist", function()
+      config.setup({
+        zellij_config_path = temp_config_path,
+        terminal = { emulator = "wezterm", config_path = "/nonexistent/dir/zj-theme.lua" },
+      })
+      local calls, restore = capture_health()
+      health.check()
+      restore()
+
+      assert.truthy(find(calls, "error", "does not exist"))
+    end)
+
+    it("reports ok when the active colorscheme is mapped for the terminal", function()
+      local term_path = vim.fn.tempname()
+      config.setup({
+        zellij_config_path = temp_config_path,
+        terminal = { emulator = "wezterm", config_path = term_path },
+      })
+      vim.g.colors_name = "nord"
+      local calls, restore = capture_health()
+      health.check()
+      restore()
+
+      assert.truthy(find(calls, "ok", "'nord' is mapped to wezterm theme"))
+    end)
+
+    it("reports warn when the active colorscheme has no terminal mapping", function()
+      local term_path = vim.fn.tempname()
+      config.setup({
+        zellij_config_path = temp_config_path,
+        terminal = { emulator = "wezterm", config_path = term_path },
+      })
+      vim.g.colors_name = "some-unmapped-theme"
+      local calls, restore = capture_health()
+      health.check()
+      restore()
+
+      assert.truthy(find(calls, "warn", "'some%-unmapped%-theme' has no wezterm mapping"))
+    end)
   end)
 end)
