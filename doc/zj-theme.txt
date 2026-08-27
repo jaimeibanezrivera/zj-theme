@@ -1,4 +1,4 @@
-*zj-theme.txt*                       Sync zellij's theme with your colorscheme
+*zj-theme.txt*        Sync zellij's (and your terminal's) theme with nvim
 *zj-theme*
 
 ==============================================================================
@@ -11,21 +11,27 @@ CONTENTS                                                   *zj-theme-contents*
   Commands ............................................... |zj-theme-commands|
   Built-in mappings ...................................... |zj-theme-mappings|
   Fallback behavior ...................................... |zj-theme-fallback|
-  Pane backgrounds ................................ |zj-theme-pane-backgrounds|
+  Terminal emulator theme ......................... |zj-theme-terminal-theme|
   Health ................................................... |zj-theme-health|
 
 ==============================================================================
 INTRODUCTION                                           *zj-theme-introduction*
 
-zj-theme.nvim syncs zellij's theme to whatever nvim colorscheme is
-currently active.
+zj-theme.nvim syncs zellij's theme — and optionally your terminal
+emulator's own theme — to whatever nvim colorscheme is currently active.
 
-It rewrites zellij's config file directly. zellij watches that file for
-changes and applies them to your already-running session automatically
-(zellij polls it roughly once a second), so this takes effect live — no
-restart needed.
+Two independent channels, each on by default or opt-in:
 
-How it works:
+  - zellij's own theme: rewrites zellij's config file directly. zellij
+    watches that file for changes and applies them to your already-running
+    session automatically (zellij polls it roughly once a second), so this
+    takes effect live — no restart needed. Requires being inside a zellij
+    session.
+  - Your terminal emulator's theme (opt-in, see |zj-theme-terminal-theme|):
+    rewrites a small file this plugin owns, which the terminal itself is
+    set up to pick up live. Works whether or not you're inside zellij.
+
+How the zellij channel works:
 
   1. A |ColorScheme| autocmd fires whenever you run `:colorscheme ...` (or a
      plugin sets one on your behalf).
@@ -39,14 +45,17 @@ How it works:
      line to rewrite — it falls back to a configurable default zellij theme
      instead of leaving things inconsistent.
 
+The terminal-theme channel follows the same shape (resolve, write, fall
+back on failure) — see |zj-theme-terminal-theme|.
+
 ==============================================================================
 REQUIREMENTS                                           *zj-theme-requirements*
 
 Neovim >= 0.10, for the `vim.health.*` API used by |zj-theme-health|.
 
-No external plugin dependency needed — see |zj-theme-pane-backgrounds| for
-how every pane, including nvim's own, gets synced. This needs zellij >=
-0.44.0 and the `zellij` CLI on `PATH`.
+No external plugin dependency needed. The terminal-theme channel
+(|zj-theme-terminal-theme|) needs the terminal emulator itself configured
+to pick up the file this plugin writes — see that section.
 
 ==============================================================================
 INSTALLATION                                           *zj-theme-installation*
@@ -72,41 +81,44 @@ See the README for packer.nvim, vim-plug, mini.deps, and vim.pack examples.
 CONFIGURATION                                         *zj-theme-configuration*
 >lua
   require("zj-theme").setup({
-    -- Path to zellij's config.kdl. Defaults to ~/.config/zellij/config.kdl.
+    -- zellij's config.kdl.
     zellij_config_path = vim.fn.expand("~/.config/zellij/config.kdl"),
 
-    -- zellij themes to fall back to when the current colorscheme has no
-    -- mapping, or when writing zellij_config_path fails. Picked based on
-    -- vim.o.background so a dark colorscheme doesn't fall back to a light
-    -- zellij theme or vice versa.
+    -- Fallback zellij themes, picked by vim.o.background.
     default_dark_theme = "default",
     default_light_theme = "pencil-light",
 
-    -- nvim colors_name -> zellij theme name. Merged over the built-in table
-    -- in lua/zj-theme/mappings.lua, so you only need
-    -- overrides/additions. A value can also be { dark = "...", light = "..." }
-    -- for colorschemes that keep vim.g.colors_name the same across
-    -- light/dark (ayu.nvim, gruvbox-material, everforest-nvim all do this,
-    -- and are already handled by the bundled defaults) — resolved via the
-    -- current vim.o.background.
+    -- nvim colorscheme -> zellij theme. Merged over mappings.lua's
+    -- defaults. Value can be { dark = "...", light = "..." } for
+    -- colorschemes that don't rename on background (ayu.nvim, etc).
     mappings = {
       mycustomtheme = "my-zellij-theme-name",
       myflexibletheme = { dark = "my-dark-zellij-theme", light = "my-light-zellij-theme" },
     },
 
-    -- Whether to push the current colorscheme's bg/fg to every pane in the
-    -- zellij session, including the one nvim itself is running in. See
-    -- |zj-theme-pane-backgrounds|. Set to false to leave every pane's
-    -- background alone.
-    sync_pane_backgrounds = true,
+    -- Terminal emulator sync — see |zj-theme-terminal-theme|. nil
+    -- emulator disables it.
+    terminal = {
+      emulator = nil, -- "wezterm" | "alacritty"
 
-    -- How often (ms) to poll for newly created zellij panes and color them
-    -- to match the current colorscheme — otherwise a pane opened after a
-    -- `:colorscheme` switch keeps zellij's default background until the
-    -- next one. Set to 0 to disable polling.
-    pane_poll_interval_ms = 1000,
+      -- nil uses the emulator's standard config dir.
+      config_path = nil,
 
-    -- Set to false to silence vim.notify warnings/errors.
+      -- alacritty only. nil defaults to ~/.config/alacritty/themes.
+      themes_dir = nil,
+
+      -- Same shape as `mappings` above, for the terminal instead of
+      -- zellij.
+      mappings = {
+        mycustomtheme = "My Custom Scheme",
+      },
+
+      -- Fallback themes. nil uses the emulator's own default.
+      default_dark_theme = nil,
+      default_light_theme = nil,
+    },
+
+    -- Silence vim.notify warnings/errors.
     notify = true,
   })
 <
@@ -119,22 +131,26 @@ COMMANDS                                                   *zj-theme-commands*
 
                                                                   *:ZjThemeNow*
 :ZjThemeNow
-  Re-applies the mapping for whatever colorscheme is currently active —
-  useful for testing config changes without switching colorschemes.
+  Re-applies the mapping for whatever colorscheme is currently active, on
+  both channels — useful for testing config changes without switching
+  colorschemes.
 
 ==============================================================================
 BUILT-IN MAPPINGS                                          *zj-theme-mappings*
 
-See `lua/zj-theme/mappings.lua` for the full list (catppuccin,
-gruvbox, tokyonight, nord, dracula, kanagawa, everforest, solarized, ayu,
-onedark, and a few variants). These are best-effort — override any of them
-via `mappings` in |zj-theme-configuration|.
+See `lua/zj-theme/mappings.lua` for the full zellij-theme mapping list
+(catppuccin, gruvbox, tokyonight, nord, dracula, kanagawa, everforest,
+solarized, ayu, onedark, and a few variants), and
+`lua/zj-theme/terminals/wezterm.lua` / `lua/zj-theme/terminals/alacritty.lua`
+for the same colorschemes mapped to each terminal's own theme names. These
+are best-effort — override any of them via `mappings` / `terminal.mappings`
+in |zj-theme-configuration|.
 
 ==============================================================================
 FALLBACK BEHAVIOR                                          *zj-theme-fallback*
 
-`default_dark_theme` or `default_light_theme` (chosen by `vim.o.background`)
-is used whenever:
+zellij's theme: `default_dark_theme` or `default_light_theme` (chosen by
+`vim.o.background`) is used whenever:
 
   - nvim is not running inside a zellij session (`$ZELLIJ` unset) — no-op,
     nothing is written at all.
@@ -142,51 +158,53 @@ is used whenever:
   - `zellij_config_path` doesn't exist/isn't readable, or has no
     `theme "..."` line to rewrite.
 
+Terminal emulator theme: `terminal.default_dark_theme` or
+`terminal.default_light_theme` is used whenever `terminal.emulator` is set
+but the active colorscheme has no entry in `terminal.mappings`, or writing
+`terminal.config_path` fails (e.g. its directory doesn't exist). Nothing
+is written at all if `terminal.emulator` is unset.
+
 ==============================================================================
-PANE BACKGROUNDS                                   *zj-theme-pane-backgrounds*
+TERMINAL EMULATOR THEME                            *zj-theme-terminal-theme*
 
 Rewriting zellij's theme only changes zellij's own colors — borders, tab
-bar, status bar. It doesn't touch the background you actually see inside
-each pane. zj-theme.nvim handles that itself, controlled by the
-`sync_pane_backgrounds` option:
+bar, status bar. It doesn't touch your terminal emulator's own palette,
+and it does nothing at all outside zellij. Setting `terminal.emulator`
+turns on a second, independent channel for that.
 
-Every pane in the session, including the one nvim itself is running in,
-gets recolored using a zellij command that can set a pane's background
-directly (needs zellij 0.44 or newer). This is a property zellij holds for
-that pane, not something tied to nvim's own process, which is why it
-sticks around after nvim exits. This needs the `zellij` command to
-actually be available on your system, not just a zellij session to be
-running — `:checkhealth zj-theme` will tell you if it isn't.
+Unlike the zellij channel, this one never touches your terminal's real
+config file. Instead it writes the resolved theme into a small file this
+plugin owns (`terminal.config_path`, defaulting to each emulator's
+standard config dir), and your terminal's real config just needs a
+one-time change to pick that file up — the same shape as the zellij
+channel needing an existing `theme "..."` line to rewrite instead of
+adding one from scratch.
 
-Colors are never reset back to zellij's own defaults — once a pane is
-colored it stays that way, including after nvim exits, until the next
-`:colorscheme` switch recolors it again. The goal is a session that keeps
-looking like your last active colorscheme everywhere, not just while nvim
-happens to be running in one of its panes.
+Only terminal emulators that reload their own config live are supported,
+each as an adapter under `lua/zj-theme/terminals/`. Currently:
 
-Set `sync_pane_backgrounds = false` to turn this off.
+  - "wezterm": writes `terminal.config_path` (a Lua file returning the
+    resolved WezTerm scheme name; defaults to
+    ~/.config/wezterm/zj-theme.lua). Your real `wezterm.lua` needs
+    `config.color_scheme = require("zj-theme")` plus
+    `wezterm.add_to_config_reload_watch_list(...)` on that file, since
+    wezterm only auto-reloads `wezterm.lua` itself by default.
+  - "alacritty": writes `terminal.config_path` (a `general.import`
+    pointing at `<terminal.themes_dir>/<theme>.toml`; defaults to
+    ~/.config/alacritty/zj-theme.toml). `terminal.themes_dir` defaults to
+    ~/.config/alacritty/themes, expected to be a checkout of
+    alacritty/alacritty-theme's themes/ folder, since Alacritty has no
+    built-in named schemes. Your real `alacritty.toml` needs
+    `general.import = [...]` pointing at `terminal.config_path`.
 
-See the demo GIF in the README (assets/demo-panes.gif) for this in action.
+Not supported: Ghostty has no automatic file-watch config reload (only a
+manual keybind/signal), so writing a file alone can't make it live; Kitty
+fits in principle but its idiomatic live-switch path is a remote-control
+call, not a file watch, so it isn't a drop-in adapter either. See
+ARCHITECTURE.md §6.2 for details if you want to attempt either.
 
-One call at a time: under the hood, this plugin never asks zellij to
-recolor several panes at once — it queues the requests and sends them one
-after another, even right after a colorscheme change when many panes need
-updating together. Doing them all at once turned out to occasionally
-confuse zellij (a harmless log error about a pane connection that had
-already closed), so this trades a tiny bit of speed for not risking that.
-With a normal number of panes open you won't notice any delay.
-
-New panes: panes only get recolored when you change colorscheme or start
-nvim, so a pane you open afterwards will briefly show zellij's default
-background until it catches up. To smooth that over, a quiet background
-check runs about once a second (`pane_poll_interval_ms`) looking for
-panes it hasn't colored yet. Set `pane_poll_interval_ms = 0` if you'd
-rather turn that off.
-
-Getting rid of that brief delay entirely would take a small companion
-living inside zellij itself, reacting the moment a pane appears instead
-of checking every second or so. Nothing exists for this yet — see the
-Roadmap section in the README for where this is headed.
+See the README's "Bonus: Terminal emulator theming" section for the full
+setup snippets.
 
 ==============================================================================
 HEALTH                                                       *zj-theme-health*
@@ -196,9 +214,10 @@ Run `:checkhealth zj-theme` to check:
   - whether `setup()` has been called
   - whether you're currently inside a zellij session
   - whether `zellij_config_path` exists and has a `theme "..."` line
-  - whether the currently active colorscheme has a mapping
-  - whether `sync_pane_backgrounds` is active (|zj-theme-pane-backgrounds|)
-  - whether the `zellij` CLI is on `PATH` and its version is new enough
-    for `set-pane-color`
+  - whether the currently active colorscheme has a zellij mapping
+  - if `terminal.emulator` is set: whether it names a supported adapter,
+    whether `terminal.config_path` is set and its directory is writable,
+    and whether the active colorscheme has a mapping for that terminal
+    too (|zj-theme-terminal-theme|)
 
 vim:tw=78:ts=8:noet:ft=help:norl:

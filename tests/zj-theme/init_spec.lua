@@ -1,81 +1,69 @@
 local config = require("zj-theme.config")
-local pane_bg = require("zj-theme.pane_bg")
+local sync = require("zj-theme.sync")
+local terminal = require("zj-theme.terminal")
 local zj_theme = require("zj-theme")
 
--- Stubs vim.system so tests never shell out to a real `zellij` binary.
-local function stub_system()
-  local orig = vim.system
-
-  vim.system = function(cmd, _opts, callback)
-    if cmd[3] == "list-panes" then
-      callback({ code = 0, stdout = vim.json.encode({}), stderr = "" })
-    else
-      callback({ code = 0, stdout = "", stderr = "" })
-    end
-  end
-
-  return function()
-    vim.system = orig
-  end
-end
-
 describe("zj-theme (setup)", function()
-  local orig_zellij, orig_pane_id
+  local orig_zellij, orig_colors_name
 
   before_each(function()
     config.setup({})
-    pane_bg.reset_warnings()
+    sync.reset_warnings()
+    terminal.reset_warnings()
     orig_zellij = vim.env.ZELLIJ
-    orig_pane_id = vim.env.ZELLIJ_PANE_ID
+    orig_colors_name = vim.g.colors_name
     vim.env.ZELLIJ = "0"
-    vim.env.ZELLIJ_PANE_ID = "1"
   end)
 
   after_each(function()
-    pane_bg.stop_polling()
     -- Drop any autocmds a setup() call in this test registered, so they
-    -- can't fire later (e.g. once VimEnter actually happens after the
-    -- whole suite finishes) or bleed into other spec files.
+    -- can't bleed into other spec files.
     vim.api.nvim_create_augroup("ZjTheme", { clear = true })
     vim.env.ZELLIJ = orig_zellij
-    vim.env.ZELLIJ_PANE_ID = orig_pane_id
+    vim.g.colors_name = orig_colors_name
   end)
 
-  it("stops a timer left over from a prior setup() call when reconfigured to disable it", function()
-    local restore = stub_system()
-    -- Simulates a poll timer already running from an earlier setup() call.
-    pane_bg.start_polling()
-    assert.is_true(pane_bg.is_polling())
+  it("registers a ColorScheme autocmd that drives both channels", function()
+    local temp_config_path = vim.fn.tempname()
+    vim.fn.writefile({ 'theme "onedark"' }, temp_config_path)
 
-    zj_theme.setup({ sync_pane_backgrounds = false })
+    zj_theme.setup({ zellij_config_path = temp_config_path })
 
-    assert.is_false(pane_bg.is_polling())
-    restore()
+    vim.g.colors_name = "nord"
+    vim.api.nvim_exec_autocmds("ColorScheme", { group = "ZjTheme" })
+
+    local lines = vim.fn.readfile(temp_config_path)
+    assert.matches('theme "nord"', table.concat(lines, "\n"))
+
+    vim.fn.delete(temp_config_path)
   end)
 
-  it("does not eagerly start polling before nvim has finished starting", function()
-    local restore = stub_system()
-    assert.is_false(pane_bg.is_polling())
+  it("sync_now() re-applies the currently active colorscheme on demand", function()
+    local temp_config_path = vim.fn.tempname()
+    vim.fn.writefile({ 'theme "onedark"' }, temp_config_path)
 
-    zj_theme.setup({ sync_pane_backgrounds = true })
+    zj_theme.setup({ zellij_config_path = temp_config_path })
+    vim.g.colors_name = "dracula"
 
-    -- vim.v.vim_did_enter is 0 while tests run (VimEnter hasn't fired yet
-    -- in this harness), so setup() should defer to the VimEnter autocmd
-    -- instead of starting the timer immediately.
-    assert.is_false(pane_bg.is_polling())
-    restore()
+    zj_theme.sync_now()
+
+    local lines = vim.fn.readfile(temp_config_path)
+    assert.matches('theme "dracula"', table.concat(lines, "\n"))
+
+    vim.fn.delete(temp_config_path)
   end)
 
-  it("leaves pane colors as-is on VimLeavePre — only polling stops", function()
-    vim.api.nvim_set_hl(0, "Normal", { bg = 0x1a1b26, fg = 0xc0caf5 })
-    local restore_system = stub_system()
-    zj_theme.setup({})
-    pane_bg.start_polling()
-    assert.is_true(pane_bg.is_polling())
+  it("also drives the terminal channel when terminal.emulator is set", function()
+    local term_path = vim.fn.tempname()
 
-    vim.api.nvim_exec_autocmds("VimLeavePre", { group = "ZjTheme" })
-    restore_system()
+    zj_theme.setup({ terminal = { emulator = "wezterm", config_path = term_path } })
+    vim.g.colors_name = "nord"
 
-    assert.is_false(pane_bg.is_polling())
+    zj_theme.sync_now()
+
+    local lines = vim.fn.readfile(term_path)
+    assert.matches('return "nord"', table.concat(lines, "\n"))
+
+    vim.fn.delete(term_path)
   end)
 end)
